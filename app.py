@@ -1,10 +1,13 @@
-from typing import Optional
+import itertools
+import threading
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 app = FastAPI()
 
 EVENTS: dict[int, str] = {}
+_ids = itertools.count(1)
+_lock = threading.Lock()
 
 
 class Note(BaseModel):
@@ -12,7 +15,7 @@ class Note(BaseModel):
 
 
 @app.get("/events")
-def list_events(limit: Optional[int] = Query(default=10, ge=1)):
+def list_events(limit: int = Query(default=10, ge=0)):
     events = [{"id": event_id, "note": note} for event_id, note in sorted(EVENTS.items(), reverse=True)]
     return events[:limit]
 
@@ -26,6 +29,7 @@ def read_event(id: int):
 
 @app.post("/events", status_code=201)
 def create_event(body: Note):
-    new_id = max(EVENTS, default=0) + 1
-    EVENTS[new_id] = body.note
+    with _lock:
+        new_id = next(_ids)
+        EVENTS[new_id] = body.note
     return {"id": new_id, "note": body.note}
